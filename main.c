@@ -8,7 +8,7 @@
 //  Parameters
 #define PORTNUMBER 8000
 
-char *generateResponse ( const char* string ) {
+char *generateResponse ( const char* string, const char* content_type) {
     size_t len = strlen (string);
     char *response = malloc(len + 128);
     if (!response) { perror ("memory allocation for response failed"); exit(1); }
@@ -17,10 +17,11 @@ char *generateResponse ( const char* string ) {
         response, len + 128,
         "HTTP/1.1 200 OK\r\n"
         "Content-Length: %zu\r\n"
-        "Content-Type: text/plain\r\n"
+        "Content-Type: %s\r\n"
         "\r\n"  //  end header "\r\n\r\n"
         "%s\r\n",
         len + 2,
+        content_type,
         string
     );
 
@@ -58,7 +59,7 @@ int main ( void ) {
     printf ("Recieved:\n%s\n", buffer);
 
     /* Respond to request */
-    char *response = generateResponse ("Hello!");
+    char *response = generateResponse("<!doctype html><html><body><h1>Hello</h1></body></html>", "text/html");
     send (client_fd, response, strlen (response), 0);
 
     /* Free memory */
