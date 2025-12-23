@@ -1,13 +1,25 @@
-//  Includes
+//  INCLUDES
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
-//  Parameters
+//  PARAMETERS
 #define PORTNUMBER 8000
-#define FILENAME "index.html"
+#define FILENAME "./html/index.html"
+
+//  GLOBALS
+volatile sig_atomic_t keep_running = 1;
+int server_fd = -1;
+
+// FUNCTIONS
+void handle_sigint ( int sig ) {
+    (void)sig;
+    keep_running = 0;
+    if (server_fd != -1) close (server_fd);
+}
 
 char *generateResponse ( const char* string, const char* content_type) {
     size_t len = strlen (string);
@@ -53,16 +65,26 @@ char *readFile ( FILE *file ) {
         exit(1);
     }
 
+    printf ("Successfully read %ld bytes\n", readsize);
+
     /* Null-terminate and return */
     buffer[filesize] = '\0';
     return buffer;
 }
 
 
-//  Main function
+//  MAIN FUNCTION
 int main ( void ) {
+    /* Open file */
+    FILE *file = fopen (FILENAME, "rb");
+    printf ("Opening file: \"%s\"\n", FILENAME);
+    if (!file) { perror ("file open failed"); exit(1); };
+    char *filecontent = readFile (file);
+
+    printf ("\nStarting server...\n");
+
     /* Create server socket */
-    int server_fd = socket (AF_INET, SOCK_STREAM, 0);
+    server_fd = socket (AF_INET, SOCK_STREAM, 0);
     if (server_fd < 0) { perror("socket failed"); exit(1); }
 
     int opt = 1;
@@ -76,40 +98,42 @@ int main ( void ) {
     addr.sin_addr.s_addr = INADDR_ANY;  // ANY NETWORKCARD
 
     /* Attach socket to address */
-    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        perror("bind failed"); exit(1);
-    }
+    if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) { perror("bind failed"); exit(1); }
     if (listen(server_fd, 10) < 0) { perror("listen failed"); exit(1); }
     socklen_t len = sizeof(addr);
     getsockname(server_fd, (struct sockaddr*)&addr, &len);
-    printf("Listening on port %d\n", ntohs(addr.sin_port));
+    printf("\nListening on port %d\n\n", ntohs(addr.sin_port));
 
-    /* Open file */
-    FILE *file = fopen (FILENAME, "rb");
-    if (!file) { perror ("file open failed"); exit(1); };
+    /* Handle requests */
+    signal (SIGINT, handle_sigint);
+    while (keep_running) {
+        int client_fd = accept (server_fd, NULL, NULL);
+        if (client_fd < 0) { perror("accept failed"); continue; }
+    
+        char recbuf[1024];
+        recv (client_fd, recbuf, sizeof (recbuf), 0);
+        printf ("Recieved GET-request\n");
 
-    char *filecontent = readFile (file);
+        /* Respond to request */
+        char *response = generateResponse(filecontent, "text/html");
+        send (client_fd, response, strlen (response), 0);
+        printf ("Sent response\n");
 
-    /* Create client socket */
-    int client_fd = accept (server_fd, NULL, NULL);
+        free (response);
+        close (client_fd);
+    }
 
-    char buffer[1024];
-    recv (client_fd, buffer, sizeof (buffer), 0);
-    printf ("Recieved:\n%s\n", buffer);
-
-    /* Respond to request */
-    char *response = generateResponse(filecontent, "text/html");
-    send (client_fd, response, strlen (response), 0);
+    //  CLOSE PROGRAM
+    printf ("\nShutting down server...\n");
 
     /* Free memory */
-    free (response);
     free (filecontent);
 
     /* Close file */
     fclose (file);
 
     /* Close sockets */
-    close (client_fd);
     close (server_fd);
+    
     return 0;
 }
