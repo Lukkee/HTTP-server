@@ -18,9 +18,9 @@ char *generateResponse ( const char* string ) {
         "HTTP/1.1 200 OK\r\n"
         "Content-Length: %zu\r\n"
         "Content-Type: text/plain\r\n"
-        "\r\n"
-        "%s",
-        len,
+        "\r\n"  //  end header "\r\n\r\n"
+        "%s\r\n",
+        len + 2,
         string
     );
 
@@ -37,6 +37,7 @@ char *generateResponse ( const char* string ) {
 int main ( void ) {
     /* Create server socket */
     int server_fd = socket (AF_INET, SOCK_STREAM, 0);
+    if (server_fd < 0) perror("server socket failed");
 
     /* Network configuration */
     struct sockaddr_in addr;
