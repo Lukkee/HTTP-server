@@ -7,7 +7,7 @@
 
 //  Parameters
 #define PORTNUMBER 8000
-#define filename "index.html"
+#define FILENAME "index.html"
 
 char *generateResponse ( const char* string, const char* content_type) {
     size_t len = strlen (string);
@@ -35,6 +35,30 @@ char *generateResponse ( const char* string, const char* content_type) {
     return response;
 }
 
+char *readFile ( FILE *file ) {
+    /* Get filesize */
+    fseek (file, 0, SEEK_END);
+    long filesize = ftell (file);
+    rewind (file);
+
+    /* Allocate memory */
+    char *buffer = malloc (filesize + 1);
+    if (!buffer) { perror ("memory allocation for file buffer failed"); exit(1); }
+
+    /* Read file into buffer */
+    size_t readsize = fread (buffer, 1, filesize, file);
+    if (readsize != (size_t)filesize) { 
+        perror ("file read failed"); 
+        free (buffer);
+        exit(1);
+    }
+
+    /* Null-terminate and return */
+    buffer[filesize] = '\0';
+    return buffer;
+}
+
+
 //  Main function
 int main ( void ) {
     /* Create server socket */
@@ -60,6 +84,12 @@ int main ( void ) {
     getsockname(server_fd, (struct sockaddr*)&addr, &len);
     printf("Listening on port %d\n", ntohs(addr.sin_port));
 
+    /* Open file */
+    FILE *file = fopen (FILENAME, "rb");
+    if (!file) { perror ("file open failed"); exit(1); };
+
+    char *filecontent = readFile (file);
+
     /* Create client socket */
     int client_fd = accept (server_fd, NULL, NULL);
 
@@ -68,11 +98,15 @@ int main ( void ) {
     printf ("Recieved:\n%s\n", buffer);
 
     /* Respond to request */
-    char *response = generateResponse("<!doctype html><html><body><h1>Hello</h1></body></html>", "text/html");
+    char *response = generateResponse(filecontent, "text/html");
     send (client_fd, response, strlen (response), 0);
 
     /* Free memory */
     free (response);
+    free (filecontent);
+
+    /* Close file */
+    fclose (file);
 
     /* Close sockets */
     close (client_fd);
